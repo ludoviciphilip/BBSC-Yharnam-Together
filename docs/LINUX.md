@@ -95,6 +95,20 @@ git diff 85b02ee7 63b57800 | git apply -3       # #598, the Linux port; applies 
 and give the build the release's version: `BB_RELEASE_VERSION=v1.5.0` for `build.sh`, and the
 release's `VERSION.txt` as above. shadnet's log then names `version=1.5.0` and `protocol=9`.
 
+## A Linux release package
+
+`tools/make-release-linux.sh -v <version> -g <game>/CUSA03173` builds the port (production) and
+shadnet, fetches the FSR 4 shaders and packs `out/release-linux/YharnamTogether-v<version>-linux-x86_64.tar.gz`
+with its `.sha256`: the Windows release's layout (`bin/`, `launcher/`, `server/`, `backend/`,
+`tools/`, `event-reference.json`, `VERSION.txt`), so the launcher opens as a co-op install and a
+host's shadnet runs from `server/` with the release's version. `-r <Windows release zip>` takes
+`event-reference.json` from the Windows release of the same version instead of a game folder.
+
+Players unpack it anywhere, run `./install-desktop.sh` once for a menu entry, and start
+`./Yharnam-Together.sh`. The binaries use the system's libraries, so the package runs where it was
+built and on distributions close to it (built on Arch: the Arch family), with the packages above
+installed; an AppImage would lift that.
+
 ## Reaching the host
 
 As on Windows (README, *Play it*): the same VPN (Radmin VPN, Tailscale, ZeroTier or any virtual
