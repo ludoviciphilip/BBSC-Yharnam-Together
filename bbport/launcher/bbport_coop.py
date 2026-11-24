@@ -1078,10 +1078,27 @@ def event_differences(made, reference):
             or mine[name].get('output_sha256') != tested[name].get('output_sha256')]
 
 
+def zlib_folder(install):
+    """Linux: the release's own zlib (bin/zlib/libz.so.1), None without one. Arch and others ship
+    zlib-ng as libz.so.1, whose deflate makes other bytes from the same data: the co-op event files
+    (party_boss_events.py recompresses them) then differ from the Windows release's and every
+    game's fingerprint warns that its game files differ. zlib's own library makes them identical."""
+    if sys.platform == 'win32':
+        return None
+    folder = Path(install) / 'bin' / 'zlib'
+    return folder if (folder / 'libz.so.1').is_file() else None
+
+
 def script_command(install, script, *args):
-    """BLauncher.exe --script (no Python needed), or Python from a source tree."""
+    """BLauncher.exe --script (no Python needed), or Python from a source tree (on Linux with the
+    release's zlib first, zlib_folder)."""
     if getattr(sys, 'frozen', False):
         return [sys.executable, '--script', str(script), *map(str, args)]
+    zlib = zlib_folder(install)
+    if zlib:
+        path = os.environ.get('LD_LIBRARY_PATH', '')
+        return ['env', f'LD_LIBRARY_PATH={zlib}{":" + path if path else ""}', sys.executable, str(script),
+                *map(str, args)]
     return [sys.executable, str(script), *map(str, args)]
 
 

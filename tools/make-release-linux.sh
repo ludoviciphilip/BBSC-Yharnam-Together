@@ -64,6 +64,22 @@ if ((server_build)); then
 fi
 [[ -x $server_out/shadnet ]] || { echo "Missing $server_out/shadnet (drop --skip-server-build)." >&2; exit 1; }
 
+# zlib's own library for the event patcher (bbport_coop.zlib_folder): Arch's libz.so.1 is zlib-ng,
+# whose deflate makes event files that differ from the Windows release's byte for byte.
+zlib_version=1.3.2
+zlib_sha256=bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16
+zlib_out="$root/out/release-linux-zlib"
+if [[ ! -f $zlib_out/libz.so.1 ]]; then
+    step "zlib $zlib_version (for the event files)"
+    mkdir -p "$zlib_out/src"
+    tarball="$zlib_out/zlib-$zlib_version.tar.gz"
+    [[ -f $tarball ]] || curl -fsSL -o "$tarball" "https://github.com/madler/zlib/releases/download/v$zlib_version/zlib-$zlib_version.tar.gz"
+    echo "$zlib_sha256  $tarball" | sha256sum -c --quiet
+    tar -C "$zlib_out/src" --strip-components=1 -xzf "$tarball"
+    (cd "$zlib_out/src" && CC=${CC:-clang} CFLAGS=-O2 ./configure --shared >/dev/null && make -s libz.so.$zlib_version)
+    cp -L "$zlib_out/src/libz.so.$zlib_version" "$zlib_out/libz.so.1"
+fi
+
 if ((fsr4)); then
     step 'FSR 4 shaders (v07, MIT, as the Windows release ships them)'
     bash "$bbport/tools/fetch_fsr4_assets.sh"
@@ -75,6 +91,7 @@ rm -rf -- "$out/stage"
 mkdir -p "$release"/{bin/gpu,launcher,tools,server,backend,licenses}
 cp "$bbport/out/bb-probe" "$bbport/out/bb-gpu-capabilities" "$release/bin/"
 cp "$bbport/out/gpu/libbbgpu.so" "$release/bin/gpu/"   # bb-probe's rpath: $ORIGIN/gpu
+mkdir -p "$release/bin/zlib" && cp "$zlib_out/libz.so.1" "$release/bin/zlib/"
 # The DLSS bridge and NVIDIA's libraries when build.sh copied them (DLSS_SDK_ROOT).
 for lib in "$bbport"/out/libbbport_dlss.so "$bbport"/out/libnvidia-ngx-dlss*.so.*; do
     if [[ -f $lib ]]; then cp "$lib" "$release/bin/"; fi
@@ -100,6 +117,7 @@ while IFS= read -r -d '' file; do
     sed 's/\r$//' "$file" > "$release/$rel"
 done < <(find "$kit" -type f -print0)
 cp "$root/emulator/LICENSES/GPL-2.0-or-later.txt" "$release/licenses/"
+sed -n '/^Copyright notice/,$p' "$zlib_out/src/README" > "$release/licenses/zlib-LICENSE.txt"
 cp "$server_out/shadnet" "$release/server/"
 cp "$root/server/worlds.cfg" "$root/server/scoreboards.cfg" "$release/server/"
 if [[ ! -f $release/server/shadnet.cfg ]]; then
@@ -115,7 +133,7 @@ if [[ -n $game ]]; then
     [[ -f $events/common.emevd.dcx ]] || { echo "No $events/common.emevd.dcx (-g is the CUSA03173 folder with 1.09)." >&2; exit 1; }
     made="$out/event-check"
     rm -rf -- "$made"
-    python3 "$release/tools/party_boss_events.py" "$made" "$events" > "$out/event-check.log" 2>&1 ||
+    LD_LIBRARY_PATH="$release/bin/zlib" python3 "$release/tools/party_boss_events.py" "$made" "$events" > "$out/event-check.log" 2>&1 ||
         { tail -10 "$out/event-check.log" >&2; echo 'The event patcher failed.' >&2; exit 1; }
     python3 - "$made/manifest.json" "$release/event-reference.json" <<'EOF'
 import json, sys
